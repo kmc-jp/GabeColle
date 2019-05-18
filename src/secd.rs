@@ -286,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn run_test() {
+    fn run_test1() {
         let id = Term::Abst("x".to_string(), Box::new(Term::Var("x".to_string()))); // (lambda x.x)
         let fappx = Term::App(Box::new(Term::Var("f".to_string())), Box::new(Term::Var("x".to_string()))); // f x
         let fx = Term::Abst("f".to_string(),
@@ -298,5 +298,18 @@ mod tests {
 
         let res = run(Dumps::State(vec![], vec![], code, Box::new(Dumps::Halt))).unwrap();
         assert_eq!(res.to_string(), "Int 42");
+    }
+    #[test]
+    fn run_test2() {
+        let id = Term::Abst("x".to_string(), Box::new(Term::Var("x".to_string()))); // (lambda x.x)
+        let fappx = Term::App(Box::new(Term::Var("f".to_string())), Box::new(Term::Var("x".to_string()))); // f x
+        let fx = Term::Abst("f".to_string(),
+                            Box::new(Term::Abst("x".to_string(),
+                                                Box::new(fappx))));
+        let fxappid = Term::App(Box::new(fx), Box::new(id));
+        let code = vec![CodeElem::Ret, CodeElem::LTerm(fxappid)];
+
+        let res = run(Dumps::State(vec![], vec![], code, Box::new(Dumps::Halt))).unwrap();
+        assert_eq!(res.to_string(), "Lambda x.(Lambda x.x) (x)")
     }
 }
