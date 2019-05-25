@@ -208,37 +208,37 @@ mod tests {
     #[test]
     fn parse_test_atom() {
         let ts: Vec<Token> = vec![Token::LP, Token::Atom, Token::Symbol("X".to_string()), Token::RP];
-        assert_eq!(parse(&ts).unwrap().to_string(), "(Atom) (Symbol(X))");
+        assert_eq!(parse(&ts).unwrap().to_string(), "(Atom Symbol(X))");
     }
 
     #[test]
     fn parse_test_eq() {
         let ts: Vec<Token> = vec![Token::LP, Token::Eq, Token::Symbol("X".to_string()), Token::Symbol("Y".to_string()), Token::RP];
-        assert_eq!(parse(&ts).unwrap().to_string(), "((Eq) (Symbol(X))) (Symbol(Y))");
+        assert_eq!(parse(&ts).unwrap().to_string(), "((Eq Symbol(X)) Symbol(Y))");
     }
 
     #[test]
     fn parse_test_car() {
         let ts: Vec<Token> = vec![Token::LP, Token::Car, Token::Symbol("X".to_string()), Token::RP];
-        assert_eq!(parse(&ts).unwrap().to_string(), "(Car) (Symbol(X))");
+        assert_eq!(parse(&ts).unwrap().to_string(), "(Car Symbol(X))");
     }
 
     #[test]
     fn parse_test_cdr() {
         let ts: Vec<Token> = vec![Token::LP, Token::Cdr, Token::Symbol("X".to_string()), Token::RP];
-        assert_eq!(parse(&ts).unwrap().to_string(), "(Cdr) (Symbol(X))");
+        assert_eq!(parse(&ts).unwrap().to_string(), "(Cdr Symbol(X))");
     }
 
     #[test]
     fn parse_test_cons() {
         let ts: Vec<Token> = vec![Token::LP, Token::Cons, Token::Symbol("X".to_string()), Token::Symbol("Y".to_string()), Token::RP];
-        assert_eq!(parse(&ts).unwrap().to_string(), "((Cons) (Symbol(X))) (Symbol(Y))");
+        assert_eq!(parse(&ts).unwrap().to_string(), "((Cons Symbol(X)) Symbol(Y))");
     }
 
     #[test]
     fn parse_test_if() {
         let ts: Vec<Token> = vec![Token::LP, Token::If, Token::Symbol("X".to_string()), Token::Symbol("Y".to_string()), Token::Symbol("Z".to_string()), Token::RP];
-        assert_eq!(parse(&ts).unwrap().to_string(), "(((If) (Symbol(X))) (Symbol(Y))) (Symbol(Z))");
+        assert_eq!(parse(&ts).unwrap().to_string(), "(((If Symbol(X)) Symbol(Y)) Symbol(Z))");
     }
 
     #[test]
@@ -250,19 +250,19 @@ mod tests {
     #[test]
     fn parse_test_lambda1() {
         let ts: Vec<Token> = vec![Token::LP, Token::Lambda, Token::LP, Token::Symbol("x".to_string()), Token::Symbol("y".to_string()), Token::RP, Token::LP, Token::Symbol("y".to_string()), Token::Symbol("x".to_string()), Token::RP, Token::RP];
-        assert_eq!(parse(&ts).unwrap().to_string(), "Lambda x.Lambda y.(Symbol(y)) (Symbol(x))");
+        assert_eq!(parse(&ts).unwrap().to_string(), "(Lambda x.(Lambda y.(Symbol(y) Symbol(x))))");
     }
 
     #[test]
     fn parse_test_lambda2() { // empty arg
         let ts: Vec<Token> = vec![Token::LP, Token::Lambda, Token::LP, Token::RP, Token::LP, Token::RP, Token::RP];
-        assert_eq!(parse(&ts).unwrap().to_string(), "(Lambda _.Nil) (Dummy)");
+        assert_eq!(parse(&ts).unwrap().to_string(), "((Lambda _.Nil) Dummy)");
     }
 
     #[test]
     fn parse_test_app1() {
         let ts: Vec<Token> = vec![Token::LP, Token::LP, Token::Lambda, Token::LP, Token::Symbol("x".to_string()), Token::RP, Token::Symbol("x".to_string()), Token::RP, Token::LP, Token::RP, Token::RP];
-        assert_eq!(parse(&ts).unwrap().to_string(), "(Lambda x.Symbol(x)) (Nil)");
+        assert_eq!(parse(&ts).unwrap().to_string(), "((Lambda x.Symbol(x)) Nil)");
     }
 
     #[test]
@@ -278,7 +278,7 @@ mod tests {
                                     Token::Symbol("a3".to_string()),
                                   Token::RP];
         assert_eq!(parse(&ts).unwrap().to_string(),
-                   "(((Lambda x.Lambda y.Lambda z.Nil) (Symbol(a1))) (Symbol(a2))) (Symbol(a3))");
+                   "((((Lambda x.(Lambda y.(Lambda z.Nil))) Symbol(a1)) Symbol(a2)) Symbol(a3))");
     }
 }
 

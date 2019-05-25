@@ -55,7 +55,7 @@ impl Constants {
             If => "If".to_string(),
             Quote(a) => "Quote(".to_string() + &a.to_string() + ")",
             Symbol(s) => "Symbol(".to_string() + &s + ")",
-            Int(i) => "Int ".to_string() + &i.to_string(),
+            Int(i) => "Int(".to_string() + &i.to_string() + ")",
             Pair(a1, a2) => "Pair(".to_string() + &a1.to_string() + ", " + &a2.to_string() + ")",
         }
     }
@@ -85,7 +85,7 @@ impl Answers {
         use Answers::*;
         match *self {
             Const(ref c) => c.to_string(),
-            Abst(ref var, ref t) => "Lambda ".to_string() + &var.to_string() + "." + &t.to_string()
+            Abst(ref var, ref t) => "(Lambda ".to_string() + &var.to_string() + "." + &t.to_string() + ")"
         }
     }
 
@@ -112,8 +112,8 @@ impl Term {
         match *self {
             Const(ref v) => v.to_string(),
             Var(ref v) => v.to_string(),
-            Abst(ref v, ref t2) => "Lambda ".to_string() + &v + "." + &t2.to_string(),
-            App(ref t1, ref t2) => "(".to_string() + &t1.to_string() + ") (" + &t2.to_string() + ")"
+            Abst(ref v, ref t2) => "(Lambda ".to_string() + &v + "." + &t2.to_string() + ")",
+            App(ref t1, ref t2) => "(".to_string() + &t1.to_string() + " " + &t2.to_string() + ")"
         }
     }
 }
@@ -131,19 +131,19 @@ mod tests {
     fn print_lambda() {
         // Constants
         let c1 = Constants::Int(1);
-        assert_eq!(c1.to_string(), "Int 1");
+        assert_eq!(c1.to_string(), "Int(1)");
 
         // Answers
         let a1 = Answers::Const(Constants::Int(2));
         let a2 = Answers::Abst("x".to_string(), Box::new(Term::Var("x".to_string())));
-        assert_eq!(a1.to_string(), "Int 2");
-        assert_eq!(a2.to_string(), "Lambda x.x");
+        assert_eq!(a1.to_string(), "Int(2)");
+        assert_eq!(a2.to_string(), "(Lambda x.x)");
 
         // Term
         let t1 = Term::Var("x".to_string());
         assert_eq!(t1.to_string(), "x");
         let t2 = Box::new(Term::Abst("x".to_string(), Box::new(t1)));
         let t3 = Box::new(Constants::Int(3).to_term());
-        assert_eq!(Term::App(t2, t3).to_string(), "(Lambda x.x) (Int 3)");
+        assert_eq!(Term::App(t2, t3).to_string(), "((Lambda x.x) Int(3))");
     }
 }

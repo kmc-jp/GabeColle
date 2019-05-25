@@ -246,19 +246,19 @@ mod tests {
 
         let res = step(Dumps::State(vec![], vec![], code, Box::new(Dumps::Halt))).unwrap();
         assert_eq!(res.to_string(),
-                   "S = (), E = (), C = (call :: Lambda x.x :: Int 42), D = halt\n");
+                   "S = (), E = (), C = (call :: (Lambda x.x) :: Int(42)), D = halt\n");
         let res = step(res).unwrap();
         assert_eq!(res.to_string(),
-                   "S = ((Int 42, ())), E = (), C = (call :: Lambda x.x), D = halt\n");
+                   "S = ((Int(42), ())), E = (), C = (call :: (Lambda x.x)), D = halt\n");
         let res = step(res).unwrap();
         assert_eq!(res.to_string(),
-                   "S = ((Int 42, ()) :: (Lambda x.x, ())), E = (), C = (call), D = halt\n");
+                   "S = ((Int(42), ()) :: ((Lambda x.x), ())), E = (), C = (call), D = halt\n");
         let res = step(res).unwrap();
         assert_eq!(res.to_string(),
-                   "S = (), E = ((x, (Int 42, ()))), C = (ret :: x), D = halt\n");
+                   "S = (), E = ((x, (Int(42), ()))), C = (ret :: x), D = halt\n");
         let res = step(res).unwrap();
         assert_eq!(res.to_string(),
-                   "S = ((Int 42, ())), E = ((x, (Int 42, ()))), C = (ret), D = halt\n");
+                   "S = ((Int(42), ())), E = ((x, (Int(42), ()))), C = (ret), D = halt\n");
     }
     #[test]
     fn step_abst_test() {
@@ -270,19 +270,19 @@ mod tests {
         let code = vec![CodeElem::Ret, CodeElem::LTerm(Term::App(Box::new(fx), Box::new(id)))];
         let res = step(Dumps::State(vec![], vec![], code, Box::new(Dumps::Halt))).unwrap();
         assert_eq!(res.to_string(),
-                   "S = (), E = (), C = (call :: Lambda f.Lambda x.(f) (x) :: Lambda x.x), D = halt\n");
+                   "S = (), E = (), C = (call :: (Lambda f.(Lambda x.(f x))) :: (Lambda x.x)), D = halt\n");
         let res = step(res).unwrap();
         assert_eq!(res.to_string(),
-                   "S = ((Lambda x.x, ())), E = (), C = (call :: Lambda f.Lambda x.(f) (x)), D = halt\n");
+                   "S = (((Lambda x.x), ())), E = (), C = (call :: (Lambda f.(Lambda x.(f x)))), D = halt\n");
         let res = step(res).unwrap();
         assert_eq!(res.to_string(),
-                   "S = ((Lambda x.x, ()) :: (Lambda f.Lambda x.(f) (x), ())), E = (), C = (call), D = halt\n");
+                   "S = (((Lambda x.x), ()) :: ((Lambda f.(Lambda x.(f x))), ())), E = (), C = (call), D = halt\n");
         let res = step(res).unwrap();
         assert_eq!(res.to_string(),
-                   "S = (), E = ((f, (Lambda x.x, ()))), C = (ret :: Lambda x.(f) (x)), D = halt\n");
+                   "S = (), E = ((f, ((Lambda x.x), ()))), C = (ret :: (Lambda x.(f x))), D = halt\n");
         let res = step(res).unwrap();
         assert_eq!(res.to_string(),
-                   "S = ((Lambda x.(f) (x), ((f, (Lambda x.x, ()))))), E = ((f, (Lambda x.x, ()))), C = (ret), D = halt\n");
+                   "S = (((Lambda x.(f x)), ((f, ((Lambda x.x), ()))))), E = ((f, ((Lambda x.x), ()))), C = (ret), D = halt\n");
     }
 
     #[test]
@@ -297,7 +297,7 @@ mod tests {
         let code = vec![CodeElem::Ret, CodeElem::LTerm(app42)];
 
         let res = run(Dumps::State(vec![], vec![], code, Box::new(Dumps::Halt))).unwrap();
-        assert_eq!(res.to_string(), "Int 42");
+        assert_eq!(res.to_string(), "Int(42)");
     }
     #[test]
     fn run_test2() {
@@ -310,6 +310,6 @@ mod tests {
         let code = vec![CodeElem::Ret, CodeElem::LTerm(fxappid)];
 
         let res = run(Dumps::State(vec![], vec![], code, Box::new(Dumps::Halt))).unwrap();
-        assert_eq!(res.to_string(), "Lambda x.(Lambda x.x) (x)")
+        assert_eq!(res.to_string(), "(Lambda x.((Lambda x.x) x))")
     }
 }
