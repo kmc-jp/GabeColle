@@ -4,6 +4,8 @@
 use std::vec::Vec; // use as stack
 
 use crate::lambda::*;
+use crate::errors::EvalError;
+use crate::errors::EvalError::*;
 
 #[derive(Clone)]
 pub struct Closure {
@@ -90,25 +92,27 @@ impl Dumps {
 // execution
 // -----------------------------------------------------------------------------
 
-fn lookup(var: &Variable, env: &Environments) -> Result<Closure, String> {
+fn lookup(var: &Variable, env: &Environments) -> Result<Closure, EvalError> {
     for i in 0..env.len() {
         let (v, l) = &env[env.len() - 1 - i];
         if v == var { return Ok(l.clone()) }
     }
-    Err("Variable not found: ".to_string() + &var)
+    Err(VariableNotFound(var.clone()))
 }
 
 
-fn pop_code(mut c: Code) -> Result<Code, String> {
-    if c.len() == 0 { return Err("pop empty code".to_string()) }
+fn pop_code(mut c: Code) -> Result<Code, EvalError> {
+    if c.len() == 0 { return Err(EmptyCode) }
     c.pop();
     Ok(c)
 }
 
 // one-step evaluation
-pub fn step(dumps: Dumps) -> Result<Dumps, String> {
+pub fn step(dumps: Dumps) -> Result<Dumps, EvalError> {
     use CodeElem::*;
     use Dumps::*;
+
+    eprintln!("{}", dumps.to_string());
 
     match dumps {
         State(s, env, code, dumps) => {
@@ -138,13 +142,13 @@ pub fn step(dumps: Dumps) -> Result<Dumps, String> {
                              Box::new(State(s, env, pop_code(code)?, dumps))))
                 }
                 [Ret] => { // [POP]
-                    if s.len() == 0 { return Err("step error".to_string()) };
+                    if s.len() == 0 { return Err(EmptyStack) };
                     match *dumps {
                         State(mut ns, nenv, nc, nd) => {
                             ns.push(s[s.len() - 1].clone());
                             Ok(State(ns, nenv, nc, nd))
                         },
-                        _ => Err("unexpected halt".to_string())
+                        _ => Err(FatalError)
                     }
                 },
                 [Call] => { // [APPLY], [DELTA]
@@ -159,27 +163,21 @@ pub fn step(dumps: Dumps) -> Result<Dumps, String> {
                                     Ok(State(ns, ne, vec![Ret, LTerm((**t).clone())], dumps))
                                 },
                                 Answers::Const(c1) => {
-                                    match &l2.ans {
-                                        Answers::Const(c2) => {
-                                            let res = delta((*c1).clone(), (*c2).clone());
-                                            let mut ns = s;
-                                            ns.pop(); ns.pop();
-                                            ns.push(Closure::new(res, vec![]));
-                                            Ok(State(ns, env, vec![Ret], dumps))
-                                        }
-                                        _ => Err("step error".to_string())
-                                    }
+                                    let ans = delta((*c1).clone(), l2.ans.clone())?;
+                                    let mut ns = s;
+                                    ns.pop(); ns.pop();
+                                    ns.push(Closure::new(ans, vec![]));
+                                    Ok(State(ns, env, vec![Ret], dumps))
                                 }
                             }
                         },
-                        _ => Err("step error".to_string())
+                        _ => Err(FatalError)
                     }
                 }
-
-                _ => Err("step error".to_string())
+                _ => Err(FatalError) // [Call]
             }
         },
-        _ => Err("cannot step: halt".to_string()) // HALT
+        _ => Err(FatalError) // HALT
     }
 }
 
@@ -216,9 +214,9 @@ fn real(l: Closure) -> Answers {
 }
 
 // entry-point
-pub fn run(dumps: Dumps) -> Result<Answers, String> {
+pub fn run(dumps: Dumps) -> Result<Answers, EvalError> {
     match dumps {
-        Dumps::Halt => Err("Error[run]: cannot run halt.".to_string()),
+        Dumps::Halt => Err(FatalError),
         Dumps::State(s, e, c, d) => {
             let s = s.as_slice();
             let c = c.as_slice();

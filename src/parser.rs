@@ -39,7 +39,7 @@ fn lambda_args(ts: &Vec<Token>, idx: &mut usize) -> Result<Vec<Variable>, Parser
             while *idx < ts.len() {
                 if let Token::RP = &ts[*idx] { break; }
                 match &ts[*idx] {
-                    Token::Symbol(s) => {
+                    Token::Symbol(s) | Token::Variable(s) => {
                         *idx += 1;
                         res.push((*s).clone());
                     },
@@ -66,10 +66,18 @@ fn build_lambda(ts: Vec<String>, body: Box<Term>) -> Term {
     }
 }
 
+fn check_end_rp(ts: &Vec<Token>, idx: usize) -> bool {
+    if ts.len() <= idx { return false }
+    match &ts[idx] {
+        Token::RP => true,
+        _         => false
+    }
+}
+
 fn parse_sexp(ts: &Vec<Token>, idx: &mut usize) -> Result<Term, ParserError> {
     use ParserError::*;
 
-    eprintln!("{}: {}", *idx, ts[*idx].to_string());
+    //eprintln!("{}: {}", *idx, ts[*idx].to_string());
 
     if ts.len() <= *idx { return Err(ExpectedSExp) }
 
@@ -88,14 +96,22 @@ fn parse_sexp(ts: &Vec<Token>, idx: &mut usize) -> Result<Term, ParserError> {
                 Token::Lambda => {
                     *idx += 1;
                     let res = Ok(build_lambda(lambda_args(&ts, idx)?, Box::new(parse_sexp(&ts, idx)?)));
-                    *idx += 1; // RP
-                    res
+                    if check_end_rp(&ts, *idx) {
+                        *idx += 1; // RP
+                        res
+                    } else {
+                        Err(ExpectedRP)
+                    }
                 },
                 Token::Quote => {
                     *idx += 1;
                     let res = Ok(Term::Const(Constants::Quote(Box::new(parse_qexp(&ts, idx)?))));
-                    *idx += 1; // RP
-                    res
+                    if check_end_rp(&ts, *idx) {
+                        *idx += 1; // RP
+                        res
+                    } else {
+                        Err(ExpectedRP)
+                    }
                 },
                 _ => {
                     let mut res = parse_sexp(&ts, idx)?;
@@ -108,18 +124,23 @@ fn parse_sexp(ts: &Vec<Token>, idx: &mut usize) -> Result<Term, ParserError> {
                     if !is_apply_form {
                         return Err(NotFunction(res.to_string()))
                     }
-                    *idx += 1; // RP
-                    Ok(res)
+                    if check_end_rp(&ts, *idx) {
+                        *idx += 1; // RP
+                        Ok(res)
+                    } else {
+                        Err(ExpectedRP)
+                    }
                 }
             }
         },
-        Token::Symbol(s) => { *idx += 1; Ok(Term::Const(Constants::Symbol(s.clone()))) }
-        Token::Atom      => { *idx += 1; Ok(Term::Const(Constants::Atom)) },
-        Token::Eq        => { *idx += 1; Ok(Term::Const(Constants::Eq)) },
-        Token::Car       => { *idx += 1; Ok(Term::Const(Constants::Car)) },
-        Token::Cdr       => { *idx += 1; Ok(Term::Const(Constants::Cdr)) },
-        Token::Cons      => { *idx += 1; Ok(Term::Const(Constants::Cons)) },
-        Token::If        => { *idx += 1; Ok(Term::Const(Constants::If)) },
+        Token::Variable(s) => { *idx += 1; Ok(Term::Var(s.clone())) }
+        Token::Symbol(s)   => { *idx += 1; Ok(Term::Const(Constants::Symbol(s.clone()))) }
+        Token::Atom        => { *idx += 1; Ok(Term::Const(Constants::Atom)) },
+        Token::Eq          => { *idx += 1; Ok(Term::Const(Constants::Eq)) },
+        Token::Car         => { *idx += 1; Ok(Term::Const(Constants::Car)) },
+        Token::Cdr         => { *idx += 1; Ok(Term::Const(Constants::Cdr)) },
+        Token::Cons        => { *idx += 1; Ok(Term::Const(Constants::Cons)) },
+        Token::If          => { *idx += 1; Ok(Term::Const(Constants::If)) },
 
         Token::RP => Err(UnexpectedRP),
         Token::Lambda => Err(UnexpectedLambda),
@@ -138,6 +159,8 @@ fn create_quote_pairs(ans: Vec<Answers>) -> Answers {
 fn parse_qexp(ts: &Vec<Token>, idx: &mut usize) -> Result<Answers, ParserError> {
     use ParserError::*;
 
+    //eprintln!("{}: {}", *idx, ts[*idx].to_string());
+
     if ts.len() <= *idx { return Err(ExpectedSExp) }
 
     match &ts[*idx] { // ( qexp* )
@@ -148,17 +171,15 @@ fn parse_qexp(ts: &Vec<Token>, idx: &mut usize) -> Result<Answers, ParserError> 
                 if let Token::RP = &ts[*idx] { break; }
                 ans.push(parse_qexp(&ts, idx)?);
             }
-            if ts.len() <= *idx { return Err(ExpectedRP) }
-            match ts[*idx] {
-                Token::RP => {
-                    *idx += 1;
-                    Ok(create_quote_pairs(ans))
-                },
-                _ => Err(ExpectedRP)
+            if check_end_rp(&ts, *idx) {
+                *idx += 1;
+                Ok(create_quote_pairs(ans))
+            } else {
+                Err(ExpectedRP)
             }
         },
 
-        Token::Symbol(s) => {
+        Token::Symbol(s) | Token::Variable(s) => {
             *idx += 1;
             Ok(Answers::Const(Constants::Symbol(s.clone())))
         },

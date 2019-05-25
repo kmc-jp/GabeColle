@@ -23,6 +23,7 @@ pub enum Token {
     Quote,  // quote
     Lambda, // lambda
     Symbol(String),
+    Variable(String),
 }
 
 impl Token {
@@ -39,7 +40,8 @@ impl Token {
             If => "IF".to_string(),
             Quote => "QUOTE".to_string(),
             Lambda => "LAMBDA".to_string(),
-            Symbol(s) => format!("SYMBOL({})", s)
+            Symbol(s) => format!("SYMBOL({})", s),
+            Variable(s) => format!("VAR({})", s),
         }
     }
 }
@@ -62,8 +64,10 @@ fn token_of_string(s: &String) -> Result<Token, LexerError> {
         "quote" => Ok(Quote),
         "lambda" => Ok(Lambda),
         t => {
-            if t.chars().all(char::is_alphanumeric) {
+            if is_symbol(t) {
                 Ok(Symbol(s.clone()))
+            } else if t.chars().all(char::is_alphanumeric) {
+                Ok(Variable(s.clone()))
             } else {
                 Err(LexerError::UnexpectedStr(s.clone()))
             }
@@ -76,6 +80,13 @@ fn is_ignore_character(c: char) -> bool {
         ' ' | '\r' | '\t' | '\n' => true,
         _ => false
     }
+}
+
+fn is_symbol(s: &str) -> bool {
+    if s.len() != 1 { return false }
+    let caps = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let c = s.chars().nth(0).unwrap();
+    caps.contains(c)
 }
 
 // @todo: support for multiline comments ?
@@ -132,10 +143,16 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn lexer_test() {
+    fn lexer_test1() {
         let tokens = analyze("(atom lambda \n \n XYZ \n eq car cdr if quote)".to_string()).unwrap();
         assert_eq!(string_of_tokens(&tokens),
-                   "LP ATOM LAMBDA SYMBOL(XYZ) EQ CAR CDR IF QUOTE RP");
+                   "LP ATOM LAMBDA VAR(XYZ) EQ CAR CDR IF QUOTE RP");
+    }
+
+    #[test]
+    fn lexer_symbol_var_test() {
+        let tokens = analyze("x X yx YX".to_string()).unwrap();
+        assert_eq!(string_of_tokens(&tokens), "VAR(x) SYMBOL(X) VAR(yx) VAR(YX)");
     }
 
     #[test]
@@ -150,7 +167,7 @@ mod tests {
     #[test]
     fn lexer_test_comment() {
         let tokens = analyze("(atom ; ahg ud 2 ga __ ;; s \n (lambda (x) x))".to_string()).unwrap();
-        assert_eq!(string_of_tokens(&tokens), "LP ATOM LP LAMBDA LP SYMBOL(x) RP SYMBOL(x) RP RP");
+        assert_eq!(string_of_tokens(&tokens), "LP ATOM LP LAMBDA LP VAR(x) RP VAR(x) RP RP");
     }
 
     #[test]
