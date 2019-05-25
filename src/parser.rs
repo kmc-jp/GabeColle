@@ -17,8 +17,16 @@ pub enum ParserError {
     ExpectedLP,
     #[error(display = "expected ')'")]
     ExpectedRP,
+    #[error(display = "unexpected ')'")]
+    UnexpectedRP,
+    #[error(display = "unexpected lambda")]
+    UnexpectedLambda,
+    #[error(display = "unexpected quote")]
+    UnexpectedQuote,
     #[error(display = "invalid argument")]
     InvalidArgs,
+    #[error(display = "{:?} is not function", _0)]
+    NotFunction(String),
 }
 
 fn lambda_args(ts: &Vec<Token>, idx: &mut usize) -> Result<Vec<Variable>, ParserError> { // ( args* )
@@ -58,91 +66,64 @@ fn build_lambda(ts: Vec<String>, body: Box<Term>) -> Term {
     }
 }
 
-fn parse_sexp1(ts: &Vec<Token>, idx: &mut usize) -> Result<Term, ParserError> {
+fn parse_sexp(ts: &Vec<Token>, idx: &mut usize) -> Result<Term, ParserError> {
     use ParserError::*;
+
+    eprintln!("{}: {}", *idx, ts[*idx].to_string());
 
     if ts.len() <= *idx { return Err(ExpectedSExp) }
 
-    if *idx + 1 < ts.len() { // check nil
+    if *idx + 1 < ts.len() { // nil
         if let (Token::LP, Token::RP) = (&ts[*idx], &ts[*idx + 1]) {
             *idx += 2;
             return Ok(Term::Const(Constants::Nil))
         }
     }
-    if let Token::Symbol(ref s) = ts[*idx] {
-        *idx += 1;
-        return Ok(Term::Const(Constants::Symbol(s.clone())))
-    }
 
-    let res = match &ts[*idx] {
+    match &ts[*idx] {
         Token::LP => {
             *idx += 1;
-            parse_sexp2(&ts, idx)?
+            if ts.len() <= *idx { return Err(ExpectedSExp) }
+            match &ts[*idx] {
+                Token::Lambda => {
+                    *idx += 1;
+                    let res = Ok(build_lambda(lambda_args(&ts, idx)?, Box::new(parse_sexp(&ts, idx)?)));
+                    *idx += 1; // RP
+                    res
+                },
+                Token::Quote => {
+                    *idx += 1;
+                    let res = Ok(Term::Const(Constants::Quote(Box::new(parse_qexp(&ts, idx)?))));
+                    *idx += 1; // RP
+                    res
+                },
+                _ => {
+                    let mut res = parse_sexp(&ts, idx)?;
+                    let mut is_apply_form = false;
+                    while *idx < ts.len() {
+                        if let Token::RP = &ts[*idx] { break; }
+                        is_apply_form = true;
+                        res = Term::App(Box::new(res), Box::new(parse_sexp(&ts, idx)?));
+                    }
+                    if !is_apply_form {
+                        return Err(NotFunction(res.to_string()))
+                    }
+                    *idx += 1; // RP
+                    Ok(res)
+                }
+            }
         },
-        _ => return Err(ExpectedLP)
-    };
-    match &ts[*idx] {
-        Token::RP => {
-            *idx += 1;
-            Ok(res)
-        },
-        _  => Err(ExpectedRP)
-    }
-}
+        Token::Symbol(s) => { *idx += 1; Ok(Term::Const(Constants::Symbol(s.clone()))) }
+        Token::Atom      => { *idx += 1; Ok(Term::Const(Constants::Atom)) },
+        Token::Eq        => { *idx += 1; Ok(Term::Const(Constants::Eq)) },
+        Token::Car       => { *idx += 1; Ok(Term::Const(Constants::Car)) },
+        Token::Cdr       => { *idx += 1; Ok(Term::Const(Constants::Cdr)) },
+        Token::Cons      => { *idx += 1; Ok(Term::Const(Constants::Cons)) },
+        Token::If        => { *idx += 1; Ok(Term::Const(Constants::If)) },
 
-fn parse_sexp2(ts: &Vec<Token>, idx: &mut usize) -> Result<Term, ParserError> {
-    use ParserError::*;
-
-    if ts.len() <= *idx { return Err(ExpectedSExp) }
-
-    match &ts[*idx] {
-        Token::Atom => {
-            *idx += 1;
-            Ok(Term::App(Box::new(Term::Const(Constants::Atom)), Box::new(parse_sexp1(&ts, idx)?)))
-        },
-        Token::Eq => {
-            *idx += 1;
-            Ok(Term::App(Box::new(Term::App(Box::new(Term::Const(Constants::Eq)),
-                                            Box::new(parse_sexp1(&ts, idx)?))),
-                         Box::new(parse_sexp1(&ts, idx)?)))
-        },
-        Token::Car => {
-            *idx += 1;
-            Ok(Term::App(Box::new(Term::Const(Constants::Car)), Box::new(parse_sexp1(&ts, idx)?)))
-        },
-        Token::Cdr => {
-            *idx += 1;
-            Ok(Term::App(Box::new(Term::Const(Constants::Cdr)), Box::new(parse_sexp1(&ts, idx)?)))
-        },
-        Token::Cons => {
-            *idx += 1;
-            Ok(Term::App(Box::new(Term::App(Box::new(Term::Const(Constants::Cons)),
-                                            Box::new(parse_sexp1(&ts, idx)?))),
-                         Box::new(parse_sexp1(&ts, idx)?)))
-        },
-        Token::If => {
-            *idx += 1;
-            let t_guard = Box::new(parse_sexp1(&ts, idx)?);
-            let t_then = Box::new(parse_sexp1(&ts, idx)?);
-            let t_else = Box::new(parse_sexp1(&ts, idx)?);
-            Ok(Term::App(Box::new(Term::App(Box::new(Term::App(Box::new(Term::Const(Constants::If)),
-                                                               t_guard)),
-                                            t_then)),
-                         t_else))
-        },
-        Token::Quote => {
-            *idx += 1;
-            Ok(Term::Const(Constants::Quote(Box::new(parse_qexp(&ts, idx)?))))
-        },
-        Token::Lambda => {
-            *idx += 1;
-            Ok(build_lambda(lambda_args(&ts, idx)?, Box::new(parse_sexp1(&ts, idx)?)))
-        },
-        _ => { // application
-            let t1 = Box::new(parse_sexp1(&ts, idx)?);
-            let t2 = Box::new(parse_sexp1(&ts, idx)?);
-            Ok(Term::App(t1, t2))
-        }
+        Token::RP => Err(UnexpectedRP),
+        Token::Lambda => Err(UnexpectedLambda),
+        Token::Quote => Err(UnexpectedQuote),
     }
 }
 
@@ -200,7 +181,7 @@ fn parse_qexp(ts: &Vec<Token>, idx: &mut usize) -> Result<Answers, ParserError> 
 
 pub fn parse(ts: &Vec<Token>) -> Result<Term, ParserError> {
     let mut idx: usize = 0;
-    parse_sexp1(&ts, &mut idx)
+    parse_sexp(&ts, &mut idx)
 }
 
 
@@ -279,9 +260,25 @@ mod tests {
     }
 
     #[test]
-    fn parse_test_app() {
+    fn parse_test_app1() {
         let ts: Vec<Token> = vec![Token::LP, Token::LP, Token::Lambda, Token::LP, Token::Symbol("x".to_string()), Token::RP, Token::Symbol("x".to_string()), Token::RP, Token::LP, Token::RP, Token::RP];
         assert_eq!(parse(&ts).unwrap().to_string(), "(Lambda x.Symbol(x)) (Nil)");
+    }
+
+    #[test]
+    fn parse_test_app2() {
+        let ts: Vec<Token> = vec![Token::LP,
+                                    Token::LP,
+                                      Token::Lambda,
+                                      Token::LP, Token::Symbol("x".to_string()), Token::Symbol("y".to_string()), Token::Symbol("z".to_string()), Token::RP,
+                                      Token::LP, Token::RP,
+                                    Token::RP,
+                                    Token::Symbol("a1".to_string()),
+                                    Token::Symbol("a2".to_string()),
+                                    Token::Symbol("a3".to_string()),
+                                  Token::RP];
+        assert_eq!(parse(&ts).unwrap().to_string(),
+                   "(((Lambda x.Lambda y.Lambda z.Nil) (Symbol(a1))) (Symbol(a2))) (Symbol(a3))");
     }
 }
 
