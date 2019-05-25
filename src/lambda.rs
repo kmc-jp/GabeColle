@@ -2,26 +2,37 @@
 // lambda term
 //
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Constants {
+    Nil,
+    Dummy,
+    Atom,
+    Eq,
+    Car,
+    Cdr,
+    Cons,
+    If,
+    Quote(Box<Answers>),
+    Pair(Box<Answers>, Box<Answers>),
     Int(i32),
+    Symbol(String),
 }
 pub type Variable = String;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Values {
     Const(Constants),
     Var(Variable),
     Abst(Variable, Box<Term>)
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Answers {
     Const(Constants),
     Abst(Variable, Box<Term>)
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Term {
     Const(Constants),
     Var(Variable),
@@ -33,8 +44,19 @@ pub enum Term {
 impl Constants {
     pub fn to_string(&self) -> String {
         use Constants::*;
-        match *self {
-            Int(i) => "Int ".to_string() + &i.to_string()
+        match self {
+            Nil => "Nil".to_string(),
+            Dummy => "Dummy".to_string(),
+            Atom => "Atom".to_string(),
+            Eq => "Eq".to_string(),
+            Car => "Car".to_string(),
+            Cdr => "Cdr".to_string(),
+            Cons => "Cons".to_string(),
+            If => "If".to_string(),
+            Quote(a) => "Quote(".to_string() + &a.to_string() + ")",
+            Symbol(s) => "Symbol(".to_string() + &s + ")",
+            Int(i) => "Int ".to_string() + &i.to_string(),
+            Pair(a1, a2) => "Pair(".to_string() + &a1.to_string() + ", " + &a2.to_string() + ")",
         }
     }
 

@@ -5,3 +5,4 @@ authors = ["suibaka <suibaka@hotmail.co.jp>"]
 edition = "2018"
 
 [dependencies]
+err-derive = "0.1"

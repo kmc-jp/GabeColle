@@ -10,6 +10,7 @@ pub enum LexerError {
     UnexpectedStr(String)
 }
 
+#[derive(Clone)]
 pub enum Token {
     LP,     // (
     RP,     // )
@@ -94,7 +95,6 @@ pub fn analyze(s: String) -> Result<Vec<Token>, LexerError> {
     let mut cur: String = String::new();
     let mut res: Vec<Token> = Vec::new();
     let mut idx: usize = 0;
-    // todo. comment
     while idx < s.len() {
         let c = s[idx];
         idx += 1;
