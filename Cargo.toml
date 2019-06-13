@@ -1,7 +1,5 @@
-[package]
-name = "gabecolle"
-version = "0.1.0"
-authors = ["suibaka <suibaka@hotmail.co.jp>"]
-edition = "2018"
+[workspace]
 
-[dependencies]
+members = [
+    "gabecolle",
+]
