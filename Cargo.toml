@@ -3,4 +3,5 @@
 members = [
     "gabecolle",
     "vm",
+    "parser",
 ]
