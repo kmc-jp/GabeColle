@@ -1,0 +1,10 @@
+[package]
+name = "gabecolle"
+version = "0.1.0"
+authors = ["hatsusato <knightspm5@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+
+vm = { path = "../vm" }
+parser = { path = "../parser" }
