@@ -1,5 +1,201 @@
 ;; layer0 evaluator in scheme
 
+;; 0
+(define (atom x) (not (pair? x)))
+(define (eq x y) (eq? x y))
+(define (if3 x y z) (if x y z))
+;; 1
+(define true 't)
+(define false #f)
+(define (cadr x) (car (cdr x)))
+(define (caddr x) (car (cdr (cdr x))))
+(define arity1 (cons () ()))
+(define arity2 (cons () (cons () ())))
+(define arity3 (cons () (cons () (cons () ()))))
+(define (get-tag x) (car x))
+(define (get-param x) (cadr x))
+(define (get-body x) (caddr x))
+;; 2
+(define fold2
+  (lambda (f g xs ys)
+    ((lambda (fold2) (fold2 fold2 f g xs ys))
+     (lambda (fold2 f g xs ys)
+       ((if3 (if3 (atom xs) true (atom ys))
+             (lambda () (g xs ys))
+             (lambda () (f (car xs) (car ys)
+                           (fold2 fold2 f g (cdr xs) (cdr ys))))))))))
+(define foldr
+  (lambda (f z xs)
+    ((lambda (foldr) (foldr foldr f z xs))
+     (lambda (foldr f z xs)
+       ((if3 (atom xs)
+             (lambda () z)
+             (lambda () (f (car xs) (foldr foldr f z (cdr xs))))))))))
+(define cps/map
+  (lambda (f xs k)
+    ((lambda (cps/map) (cps/map cps/map f xs k))
+     (lambda (cps/map f xs k)
+       ((if3 (atom xs)
+             (lambda () (k xs))
+             (lambda ()
+               (f (car xs)
+                  (lambda (hd)
+                    (cps/map cps/map f (cdr xs)
+                             (lambda (tl)
+                               (k (cons hd tl)))))))))))))
+;; 3
+(define cps/subst
+  (lambda (exp keys vals params k)
+    ((lambda (cps/if exist lookup append make-quote make-lambda)
+       ((lambda (cps/subst)
+          (cps/subst cps/subst exp keys vals params k))
+        (lambda (cps/subst exp keys vals params k)
+          ((cps/if
+            (lambda () (atom exp))
+            (cps/if
+             (lambda () (exist exp params))
+             (lambda () (k exp))
+             (lambda () (k (lookup exp make-quote keys vals))))
+            (cps/if
+             (lambda () (eq (get-tag exp) 'quote))
+             (lambda () (k exp))
+             (cps/if
+              (lambda () (eq (get-tag exp) 'lambda))
+              (lambda ()
+                (cps/subst cps/subst (get-body exp) keys vals
+                           (append (get-param exp) params)
+                           (lambda (body)
+                             (k (make-lambda (get-param exp) body)))))
+              (lambda ()
+                (cps/map (lambda (x k)
+                           (cps/subst cps/subst x keys vals params k))
+                         exp k)))))))))
+     ;; cps/if
+     (lambda (x y z)
+       (lambda () ((if3 (x) y z))))
+     ;; exist
+     (lambda (x ys)
+       (foldr (lambda (p r) (if3 (eq x p) true r)) false ys))
+     ;; lookup
+     (lambda (x f ks vs)
+       (fold2 (lambda (k v r)
+                ((if3 (eq k x) (lambda () (f v)) (lambda () r))))
+              (lambda (k v) x) ks vs))
+     ;; append
+     (lambda (xs ys) (foldr cons ys xs))
+     ;; make-quote
+     (lambda (x) (cons 'quote (cons x ())))
+     ;; make-lambda
+     (lambda (params body)
+       (cons 'lambda (cons params (cons body ()))))
+     )))
+(define same-len
+  (lambda (xs ys)
+    (fold2 (lambda (x y r) r)
+           (lambda (x y) (if3 (eq x ()) (eq y ()) false))
+           xs ys)))
+(define cps/eval-switch
+  (lambda (f k/then k/else)
+    (lambda (x skip)
+      ((if3 (f x) k/then k/else) x skip))))
+;; 4
+(define cps/eval-map
+  (lambda (eval next)
+    (lambda (x skip)
+      (cps/map eval x
+               (lambda (x) (next x skip))))))
+(define cps/eval-subst
+  (lambda (next)
+    (lambda (x skip)
+      (cps/subst (get-body (car x)) (get-param (car x)) (cdr x) ()
+                 (lambda (x) (next x skip))))))
+(define cps/eval-fn
+  (lambda (tag ar next f)
+    (cps/eval-switch
+     (lambda (x) (eq (get-tag x) tag))
+     (cps/eval-switch
+      (lambda (x) (same-len (cdr x) ar))
+      (lambda (x skip) (skip (print tag (f (cdr x)))))
+      (error tag))
+     next)))
+;; 5
+(define cps/eval-self
+  (lambda (next)
+    (cps/eval-switch atom
+                     (lambda (x skip) (skip (print 'eval-self x)))
+                     next)))
+(define cps/eval-quote
+  (lambda (next)
+    (cps/eval-fn 'quote arity1 next car)))
+(define cps/eval-lambda
+  (lambda (next)
+    (cps/eval-fn 'lambda arity2 next
+                 (lambda (args) (cons 'lambda args)))))
+(define cps/eval-atom
+  (lambda (next)
+    (cps/eval-fn 'atom arity1 next
+                 (lambda (args) (if3 (atom (car args)) true ())))))
+(define cps/eval-eq
+  (lambda (next)
+    (cps/eval-fn 'eq arity2 next
+                 (lambda (args) (if3 (eq (car args) (cadr args)) true ())))))
+(define cps/eval-car
+  (lambda (next)
+    (cps/eval-fn 'car arity1 next
+                 (lambda (args) ((if3 (atom (car args))
+                                      (lambda () ())
+                                      (lambda () (car (car args)))))))))
+(define cps/eval-cdr
+  (lambda (next)
+    (cps/eval-fn 'cdr arity1 next
+                 (lambda (args) ((if3 (atom (car args))
+                                      (lambda () ())
+                                      (lambda () (cdr (car args)))))))))
+(define cps/eval-cons
+  (lambda (next)
+    (cps/eval-fn 'cons arity2 next
+                 (lambda (args) (cons (car args) (cadr args))))))
+(define cps/eval-if
+  (lambda (next)
+    (cps/eval-fn 'if arity3 next
+                 (lambda (args) (if3 (eq (car args) ()) (caddr args) (cadr args))))))
+(define cps/eval-apply
+  (lambda (next)
+    (cps/eval-switch
+     (lambda (x) (same-len (car x) arity3))
+     (cps/eval-switch
+      (lambda (x) (eq (get-tag (car x)) 'lambda))
+      (cps/eval-switch
+       (lambda (x) (same-len (get-param (car x)) (cdr x)))
+       (cps/eval-subst
+        (lambda (x skip) (next (print 'apply x) skip)))
+       (error 'arity-apply))
+      (error 'no-lambda))
+     (error 'arity-lambda))))
+;; 6
+(define (cps/eval x k)
+  (print (counter/get) x)
+  ((if3
+    (counter)
+    (lambda ()
+      ((cps/eval-self
+        (cps/eval-quote
+         (cps/eval-lambda
+          (cps/eval-map
+           cps/eval
+           (cps/eval-switch
+            (lambda (x) (atom (car x)))
+            (cps/eval-atom
+             (cps/eval-eq
+              (cps/eval-car
+               (cps/eval-cdr
+                (cps/eval-cons
+                 (cps/eval-if
+                  (error 'unknown-fn)))))))
+            (cps/eval-apply cps/eval))))))
+       x k))
+    (lambda () (k x)))))
+
 ;; debug
 (define debug #t)
 (define (toggle-debug)
@@ -7,137 +203,10 @@
 (define (print tag x)
   (if debug (begin (display tag) (display ": ") (display x) (newline) x)
       x))
-(define (error reason x)
-  (print "ERROR" reason)
-  (print "value" x))
-(define (log tag k)
-  (lambda (x) (k (print tag x))))
-
-;; util
-(define false #f)
-(define true 't)
-(define (not1 x) (if x false true))
-(define (and2 x y) (if x y false))
-(define (or2 x y) (if x true y))
-(define (atom x) (not (pair? x)))
-(define (eq x y) (eq? x y))
-(define (cadr x) (car (cdr x)))
-(define (caddr x) (car (cdr (cdr x))))
-(define (foldr f z xs)
-  (if (atom xs) z
-      (f (car xs) (foldr f z (cdr xs)))))
-(define (fold2 f g xs ys)
-  (if (or2 (atom xs) (atom ys)) (g xs ys)
-      (f (car xs) (car ys) (fold2 f g (cdr xs) (cdr ys)))))
-(define (list2 x y) (cons x (cons y ())))
-(define arity1 (cons () ()))
-(define arity2 (list2 () ()))
-(define arity3 (cons () (list2 () ())))
-(define (same-len? xs ys)
-  (fold2 (lambda (x y r) r)
-         (lambda (x y) (and2 (eq x ()) (eq y ())))
-         xs ys))
-
-;; subst
-(define (exist x ys)
-  (foldr (lambda (p r) (or2 (eq x p) r)) false ys))
-(define (lookup x f ks vs)
-  (fold2 (lambda (k v r)
-           (if (eq k x) (f v) r))
-         (lambda (k v) x) ks vs))
-(define (append xs ys)
-  (foldr cons ys xs))
-(define (make-lambda params body)
-  (cons 'lambda (list2 params body)))
-(define (get-param x) (cadr x))
-(define (get-body x) (caddr x))
-(define (subst exp keys vals params)
-  (cond ((atom exp)
-         (if (exist exp params) exp
-             (lookup exp (lambda (x) (list2 'quote x)) keys vals)))
-        ((eq (car exp) 'quote) exp)
-        ((eq (car exp) 'lambda)
-         (make-lambda (get-param exp)
-                      (subst (get-body exp) keys vals
-                             (append (get-param exp) params))))
-        (else
-         (foldr (lambda (x r)
-                  (cons (subst x keys vals params) r))
-                () exp))))
-
-;; eval
-(define (cps/eval x k)
-  (print (counter/get) x)
-  (if (not (counter)) (k x)
-      (cps/pre-eval
-       x k
-       (lambda (x)
-         (cps/map
-          cps/eval (print 'map/before x)
-          (lambda (x)
-            (cps/post-eval
-             (print 'map/after x) k
-             (lambda (x)
-               (cps/eval x k)))))))))
-(define (cps/pre-eval x skip next)
-  (cps/eval-atom
-   x (log 'atom skip)
-   (lambda (x)
-     (cps/eval-special
-      x (log 'special skip)
-      next))))
-(define (cps/map f xs k)
-  (if (atom xs) (k xs)
-      (f (car xs) (lambda (hd) (cps/map f (cdr xs)
-                                        (lambda (tl)
-                                          (k (cons hd tl))))))))
-(define (cps/post-eval x skip next)
-  (if (atom (car x))
-      (cps/eval-normal
-       x (lambda (x) (skip (print 'normal x))))
-      (cps/eval-apply
-       x (lambda (x) (next (print 'apply x))))))
-(define (cps/eval-atom x skip next)
-  (if (atom x) (skip x) (next x)))
-(define (arity-special? fn args)
-  (cond ((eq fn 'quote) (same-len? args arity1))
-        ((eq fn 'lambda) (same-len? args arity2))
-        (else true)))
-(define (cps/eval-special x skip next)
-  (let ((fn (car x)) (args (cdr x)))
-    (cond ((not1 (arity-special? fn args)) (error 'arity-special x))
-          ((eq fn 'quote) (skip (car args)))
-          ((eq fn 'lambda) (skip x))
-          (else (next x)))))
-(define (arity-normal? fn args)
-  (cond ((eq fn 'atom) (same-len? args arity1))
-        ((eq fn 'eq  ) (same-len? args arity2))
-        ((eq fn 'car ) (same-len? args arity1))
-        ((eq fn 'cdr ) (same-len? args arity1))
-        ((eq fn 'cons) (same-len? args arity2))
-        ((eq fn 'if  ) (same-len? args arity3))
-        (else true)))
-(define (cps/eval-normal x k)
-  (let ((fn (car x)) (args (cdr x)))
-    (cond
-     ((not1 (arity-normal? fn args)) (error 'arity-normal x))
-     ((eq fn 'atom) (k (if (atom (car args)) true ())))
-     ((eq fn 'eq  ) (k (if (eq (car args) (cadr args)) true ())))
-     ((eq fn 'car ) (k (if (atom (car args)) () (car (car args)))))
-     ((eq fn 'cdr ) (k (if (atom (car args)) () (cdr (car args)))))
-     ((eq fn 'cons) (k (cons (car args) (cadr args))))
-     ((eq fn 'if  ) (k (if (eq (car args) ()) (caddr args) (cadr args))))
-     (else (error 'eval-normal x)))))
-(define (arity-apply? fn args)
-  (if (same-len? fn arity3)
-      (and2 (eq (car fn) 'lambda)
-            (same-len? (get-param fn) args))
-      false))
-(define (cps/eval-apply x k)
-  (let ((fn (car x)) (args (cdr x)))
-    (if (arity-apply? fn args)
-        (k (subst (get-body fn) (get-param fn) args ()))
-        (error 'eval-apply x))))
+(define (error reason)
+  (lambda (x skip)
+    (print "ERROR" reason)
+    (print "value" x)))
 
 ;; misc
 (define counter/value 0)
