@@ -230,7 +230,7 @@
             )))
         (lambda (x k) (cps/eval-rec cps/eval-rec x k))
         (lambda (eval) (lambda () (eval x k)))
-        (lambda () (k x))
+        (lambda () (display "STOP: ") (display (counter/get)) (newline) (k x))
         (lambda (x) (atom (car x)))
         (error 'unknown-fn)
         ))
@@ -240,7 +240,7 @@
 (define counter/value 0)
 (define (counter/get) counter/value)
 (define (counter/set n) (set! counter/value n))
-(define limit/value 500)
+(define limit/value 500000)
 (define (limit/get) limit/value)
 (define (limit/set n) (set! limit/value n))
 (define (counter)
@@ -248,6 +248,8 @@
     (counter/set (+ 1 value))
     (< value (limit/get))))
 (define (counter/reset) (counter/set 0))
+
+;; test
 (define reverse
   '(lambda (xs)
      ((lambda (f) (f f xs ()))
@@ -256,15 +258,18 @@
              (lambda () ys)
              (lambda () (f f (cdr xs) (cons (car xs) ys)))))))))
 (define numlist
-  '(cons 0 (cons 1 (cons 2 (cons 3 (cons 4 ()))))))
+  '(quote (0 1 2 3 4)))
 (define (eval exp)
   (counter/reset)
   (cps/eval exp (lambda (x) x)))
 (define (test-eval)
   (eval (list reverse numlist)))
+(define (layer0/test-eval)
+  (debug/off)
+  (eval (list layer0 (list 'quote (list reverse numlist)))))
 
 (define layer0
-  '((lambda (true false cadr caddr arity1 arity2 arity3 print. error)
+  '((lambda (true false if3 cadr caddr arity1 arity2 arity3 get-tag get-param get-body print error)
       ((lambda (fold2 foldr cps/map)
          ((lambda (cps/subst same-len cps/eval-switch)
             ((lambda (cps/eval-map cps/eval-subst cps/eval-fn)
@@ -272,78 +277,76 @@
                          cps/eval-quote cps/eval-lambda cps/eval-atom cps/eval-eq
                          cps/eval-car cps/eval-cdr cps/eval-cons cps/eval-if
                          cps/eval-apply)
-                  ;; eval
-                  (lambda (exp)
-                    ((lambda (cps/eval) (cps/eval cps/eval exp (lambda (x) x)))
-                     ;; cps/eval
-                     (lambda (cps/eval x k)
-                       ((cps/eval-self
-                         (cps/eval-quote
-                          (cps/eval-lambda
-                           (cps/eval-map
-                            (lambda (x k) (cps/eval cps/eval x k))
-                            (cps/eval-switch
-                             (lambda (x) (atom (car x)))
-                             (cps/eval-atom
-                              (cps/eval-eq
-                               (cps/eval-car
-                                (cps/eval-cdr
-                                 (cps/eval-cons
-                                  (cps/eval-if (error (quote unknown-fn))))))))
-                             (cps/eval-apply
-                              (lambda (x k) (cps/eval cps/eval x k))))))))
-                        x k))
+                  (lambda (x)
+                    ((lambda (cps/eval-rec) (cps/eval-rec cps/eval-rec x (lambda (x) x)))
+                     (lambda (cps/eval-rec x k)
+                       ((lambda (cps/eval start normal unknown)
+                          (start
+                           (cps/eval-self
+                            (cps/eval-quote
+                             (cps/eval-lambda
+                              (cps/eval-map
+                               cps/eval
+                               (cps/eval-switch
+                                normal
+                                (cps/eval-atom
+                                 (cps/eval-eq
+                                  (cps/eval-car
+                                   (cps/eval-cdr
+                                    (cps/eval-cons
+                                     (cps/eval-if
+                                      unknown))))))
+                                (cps/eval-apply cps/eval))))))))
+                        ;; cps/eval
+                        (lambda (x k) (cps/eval-rec cps/eval-rec x k))
+                        ;; start
+                        (lambda (eval) (eval x k))
+                        ;; normal
+                        (lambda (x) (atom (car x)))
+                        ;; unknown
+                        (error (quote unknown-fn))
+                        ))
                      )))
                 ;; cps/eval-self
                 (lambda (next)
-                  (cps/eval-switch
-                   atom
-                   (lambda (x skip) (skip (print (quote eval-self) x)))
-                   next))
+                  (cps/eval-switch atom
+                                   (lambda (x skip) (skip (print (quote eval-self) x)))
+                                   next))
                 ;; cps/eval-quote
                 (lambda (next)
                   (cps/eval-fn (quote quote) arity1 next car))
                 ;; cps/eval-lambda
                 (lambda (next)
                   (cps/eval-fn (quote lambda) arity2 next
-                               (lambda (args)
-                                 (cons (quote lambda) args))))
+                               (lambda (args) (cons (quote lambda) args))))
                 ;; cps/eval-atom
                 (lambda (next)
                   (cps/eval-fn (quote atom) arity1 next
-                               (lambda (args)
-                                 (if (atom (car args)) true ()))))
+                               (lambda (args) (if3 (atom (car args)) true ()))))
                 ;; cps/eval-eq
                 (lambda (next)
                   (cps/eval-fn (quote eq) arity2 next
-                               (lambda (args)
-                                 (if (eq (car args) (cadr args)) true ()))))
+                               (lambda (args) (if3 (eq (car args) (cadr args)) true ()))))
                 ;; cps/eval-car
                 (lambda (next)
                   (cps/eval-fn (quote car) arity1 next
-                               (lambda (args)
-                                 ((if (atom (car args))
-                                      (lambda () ())
-                                      (lambda () (car (car args))))))))
+                               (lambda (args) ((if3 (atom (car args))
+                                                    (lambda () ())
+                                                    (lambda () (car (car args))))))))
                 ;; cps/eval-cdr
                 (lambda (next)
                   (cps/eval-fn (quote cdr) arity1 next
-                               (lambda (args)
-                                 ((if (atom (car args))
-                                      (lambda () ())
-                                      (lambda () (cdr (car args))))))))
+                               (lambda (args) ((if3 (atom (car args))
+                                                    (lambda () ())
+                                                    (lambda () (cdr (car args))))))))
                 ;; cps/eval-cons
                 (lambda (next)
                   (cps/eval-fn (quote cons) arity2 next
-                               (lambda (args)
-                                 (cons (car args) (cadr args)))))
+                               (lambda (args) (cons (car args) (cadr args)))))
                 ;; cps/eval-if
                 (lambda (next)
                   (cps/eval-fn (quote if) arity3 next
-                               (lambda (args)
-                                 (if (eq (car args) ())
-                                     (caddr args)
-                                     (cadr args)))))
+                               (lambda (args) (if3 (eq (car args) ()) (caddr args) (cadr args)))))
                 ;; cps/eval-apply
                 (lambda (next)
                   (cps/eval-switch
@@ -361,7 +364,8 @@
              ;; cps/eval-map
              (lambda (eval next)
                (lambda (x skip)
-                 (cps/map eval x (lambda (x) (next x skip)))))
+                 (cps/map eval x
+                          (lambda (x) (next x skip)))))
              ;; cps/eval-subst
              (lambda (next)
                (lambda (x skip)
@@ -379,9 +383,10 @@
              ))
           ;; cps/subst
           (lambda (exp keys vals params k)
-            ((lambda (cps/if exist lookup append make-quote make-lambda)
-               ((lambda (cps/subst) (cps/subst cps/subst exp keys vals params k))
-                (lambda (cps/subst exp keys vals params k)
+            ((lambda (cps/subst-rec)
+               (cps/subst-rec cps/subst-rec exp keys vals params k))
+             (lambda (cps/subst-rec exp keys vals params k)
+               ((lambda (cps/subst cps/if exist lookup append make-quote make-lambda)
                   ((cps/if
                     (lambda () (atom exp))
                     (cps/if
@@ -389,77 +394,98 @@
                      (lambda () (k exp))
                      (lambda () (k (lookup exp make-quote keys vals))))
                     (cps/if
-                     (lambda () (eq (get-tag exp) (quote quote)))
+                     (lambda () (eq (get-tag exp) 'quote))
                      (lambda () (k exp))
                      (cps/if
-                      (lambda () (eq (get-tag exp) (quote lambda)))
+                      (lambda () (eq (get-tag exp) 'lambda))
                       (lambda ()
-                        (cps/subst cps/subst (get-body exp) keys vals
+                        (cps/subst (get-body exp) keys vals
                                    (append (get-param exp) params)
                                    (lambda (body)
                                      (k (make-lambda (get-param exp) body)))))
                       (lambda ()
                         (cps/map (lambda (x k)
-                                   (cps/subst cps/subst x keys vals params k))
-                                 exp k)))))))))
-             ;; cps/if
-             (lambda (x y z) (lambda () ((if (x) y z))))
-             ;; exist
-             (lambda (x ys) (foldr (lambda (p r) (if (eq x p) true r)) false ys))
-             ;; lookup
-             (lambda (x f ks vs) (fold2 (lambda (k v r)
-                                          ((if (eq k x)
-                                               (lambda () (f v))
-                                               (lambda () r))))
-                                        (lambda (k v) x)
-                                        ks vs))
-             ;; append
-             (lambda (xs ys) (foldr cons ys xs))
-             ;; make-quote
-             (lambda (x) (cons (quote quote) (cons x ())))
-             ;; make-lambda
-             (lambda (params body) (cons (quote lambda) (cons params (cons body ()))))
+                                   (cps/subst x keys vals params k))
+                                 exp k)))))))
+                ;; cps/subst
+                (lambda (exp keys vals params k)
+                  (cps/subst-rec cps/subst-rec exp keys vals params k))
+                ;; cps/if
+                (lambda (x y z)
+                  (lambda () ((if3 (x) y z))))
+                ;; exist
+                (lambda (x ys)
+                  (foldr (lambda (p r) (if3 (eq x p) true r)) false ys))
+                ;; lookup
+                (lambda (x f ks vs)
+                  (fold2 (lambda (k v r)
+                           ((if3 (eq k x) (lambda () (f v)) (lambda () r))))
+                         (lambda (k v) x) ks vs))
+                ;; append
+                (lambda (xs ys) (foldr cons ys xs))
+                ;; make-quote
+                (lambda (x) (cons 'quote (cons x ())))
+                ;; make-lambda
+                (lambda (params body)
+                  (cons 'lambda (cons params (cons body ()))))
+                ))
              ))
           ;; same-len
-          (lambda (xs ys) (fold2 (lambda (x y r) r)
-                                 (lambda (x y) (if (eq x ()) (eq y ()) false))
-                                 xs ys))
+          (lambda (xs ys)
+            (fold2 (lambda (x y r) r)
+                   (lambda (x y) (if3 (eq x ()) (eq y ()) false))
+                   xs ys))
           ;; cps/eval-switch
-          (lambda (f k/then k/else) (lambda (x skip)
-                                      ((if (f x) k/then k/else) x skip)))
+          (lambda (f k/then k/else)
+            (lambda (x skip)
+              ((if3 (f x) k/then k/else) x skip)))
           ))
        ;; fold2
        (lambda (f g xs ys)
-         ((lambda (fold2) (fold2 fold2 f g xs ys))
-          (lambda (fold2 f g xs ys)
-            ((if (if (atom xs) true (atom ys))
-                 (lambda () (g xs ys))
-                 (lambda () (f (car xs) (car ys)
-                               (fold2 fold2 f g (cdr xs) (cdr ys)))))))))
+         ((lambda (fold2-rec) (fold2-rec fold2-rec f g xs ys))
+          (lambda (fold2-rec f g xs ys)
+            ((lambda (fold2)
+               ((if3 (if3 (atom xs) true (atom ys))
+                     (lambda () (g xs ys))
+                     (lambda () (f (car xs) (car ys)
+                                   (fold2 f g (cdr xs) (cdr ys)))))))
+             (lambda (f g xs ys) (fold2-rec fold2-rec f g xs ys))
+             ))
+          ))
        ;; foldr
        (lambda (f z xs)
-         ((lambda (foldr) (foldr foldr f z xs))
-          (lambda (foldr f z xs)
-            ((if (atom xs)
-                 (lambda () z)
-                 (lambda () (f (car xs) (foldr foldr f z (cdr xs)))))))))
+         ((lambda (foldr-rec) (foldr-rec foldr-rec f z xs))
+          (lambda (foldr-rec f z xs)
+            ((lambda (foldr)
+               ((if3 (atom xs)
+                     (lambda () z)
+                     (lambda () (f (car xs) (foldr f z (cdr xs)))))))
+             (lambda (f z xs) (foldr-rec foldr-rec f z xs))
+             ))
+          ))
        ;; cps/map
        (lambda (f xs k)
-         ((lambda (cps/map) (cps/map cps/map f xs k))
-          (lambda (cps/map f xs k)
-            ((if (atom xs)
-                 (lambda () (k xs))
-                 (lambda ()
-                   (f (car xs)
-                      (lambda (hd)
-                        (cps/map cps/map f (cdr xs)
-                                 (lambda (tl)
-                                   (k (cons hd tl))))))))))))
+         ((lambda (cps/map-rec) (cps/map-rec cps/map-rec f xs k))
+          (lambda (cps/map-rec f xs k)
+            ((lambda (cps/map)
+               ((if3 (atom xs)
+                     (lambda () (k xs))
+                     (lambda ()
+                       (f (car xs)
+                          (lambda (hd)
+                            (cps/map f (cdr xs)
+                                     (lambda (tl)
+                                       (k (cons hd tl))))))))))
+             (lambda (f xs k) (cps/map-rec cps/map-rec f xs k))
+             ))
+          ))
        ))
     ;; true
     (quote t)
     ;; false
     ()
+    ;; if3
+    (lambda (x y z) (if x y z))
     ;; cadr
     (lambda (x) (car (cdr x)))
     ;; caddr
@@ -470,8 +496,14 @@
     (cons () (cons () ()))
     ;; arity3
     (cons () (cons () (cons () ())))
+    ;; get-tag
+    (lambda (x) (car x))
+    ;; get-param
+    (lambda (x) (car (cdr x)))
+    ;; get-body
+    (lambda (x) (car (cdr (cdr x))))
     ;; print
     (lambda (tag x) x)
     ;; error
-    (lambda (reason) (lambda (x skip) (cons reason x)))
+    (lambda (reason) (lambda (x skip) (cons (cons (quote error) reason) (cons x ()))))
     ))
