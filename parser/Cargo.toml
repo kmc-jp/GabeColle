@@ -5,3 +5,4 @@ authors = ["hatsusato <knightspm5@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+err-derive = "0.1"
